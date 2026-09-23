@@ -1,0 +1,5 @@
+{
+  "version": "2.0",
+  "url": "https://raw.githubusercontent.com/Moreettoo/repositorio-firmware/main/firmware_v2.bin",
+  "descricao": "Adiciona ordenacao, mediana, histerese NORMAL/ALERTA e LED de estado"
+}
