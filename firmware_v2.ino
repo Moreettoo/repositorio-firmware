@@ -26,6 +26,7 @@ const unsigned long INTERVALO_SESSAO_MS = 48000;
 const int ALTURA_MIN_CM = 10;
 const int ALTURA_MAX_CM = 20;
 const unsigned int SESSOES_ANTES_DA_OTA = 3;
+const unsigned long OTA_TIMEOUT_SEM_DADOS_MS = 30000;
 const int LIMITE_ALERTA_CM = 16;
 const int LIMITE_NORMAL_CM = 14;
 
@@ -191,6 +192,42 @@ bool buscarManifesto(String &versao, String &urlFirmware)
   return true;
 }
 
+size_t receberFirmware(WiFiClient *stream, int tamanho)
+{
+  uint8_t buffer[1024];
+  size_t gravados = 0;
+  unsigned long ultimoDado = millis();
+
+  while (tamanho <= 0 || gravados < (size_t)tamanho)
+  {
+    size_t disponivel = stream->available();
+    if (disponivel > 0)
+    {
+      size_t lidos = stream->readBytes(buffer, disponivel < sizeof(buffer) ? disponivel : sizeof(buffer));
+      if (lidos > 0)
+      {
+        if (Update.write(buffer, lidos) != lidos)
+          return 0;
+        gravados += lidos;
+        ultimoDado = millis();
+      }
+    }
+    else if (!stream->connected())
+    {
+      break;
+    }
+    else if (millis() - ultimoDado > OTA_TIMEOUT_SEM_DADOS_MS)
+    {
+      break;
+    }
+    else
+    {
+      delay(1);
+    }
+  }
+  return gravados;
+}
+
 bool baixarEAtualizar(const String &urlFirmware)
 {
   WiFiClientSecure clienteSeguro;
@@ -223,7 +260,14 @@ bool baixarEAtualizar(const String &urlFirmware)
     return false;
   }
 
-  size_t gravados = Update.writeStream(*http.getStreamPtr());
+  size_t gravados = receberFirmware(http.getStreamPtr(), tamanho);
+  if (gravados == 0 && Update.hasError())
+  {
+    Serial.printf("OTA erro: gravacao (%s)\n", Update.errorString());
+    Update.abort();
+    http.end();
+    return false;
+  }
 
   if (tamanho > 0 && gravados != (size_t)tamanho)
   {
